@@ -1,0 +1,77 @@
+version: "3.9"
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.3
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports: ["2181:2181"]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.3
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports: ["9093:9093"]
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+  neo4j:
+    image: neo4j:5.22
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASS:-neo4j_password}
+      NEO4J_dbms_security_auth__minimum__password__length: 6
+    volumes:
+      - neo4j_data:/data
+      - ./infra/neo4j:/var/lib/neo4j/conf
+    ports: ["7474:7474","7687:7687"]
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.2
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports: ["9200:9200"]
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.2
+    depends_on: [elasticsearch]
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports: ["5601:5601"]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      - NEO4J_URI=${NEO4J_URI}
+      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_PASS=${NEO4J_PASS}
+      - ELASTIC_URL=${ELASTIC_URL}
+      - REDIS_URL=${REDIS_URL}
+      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
+      - MIN_CITATIONS=${MIN_CITATIONS:-3}
+      - MAX_TOKENS=${MAX_TOKENS:-8192}
+    depends_on: [neo4j, elasticsearch, redis, kafka]
+    ports: ["8080:8080"]
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: apps/orchestrator/Dockerfile
+    environment:
+      - REDIS_URL=${REDIS_URL}
+      - COST_CAP_USD=${COST_CAP_USD:-2.00}
+    depends_on: [api, redis]
+
+volumes:
+  neo4j_data:

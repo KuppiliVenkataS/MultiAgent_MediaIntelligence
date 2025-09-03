@@ -1,17 +1,18 @@
 SHELL := /bin/bash
+DOCKER_COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
 .PHONY: up down restart logs test seed brief fmt
 
 up:
-	docker compose up -d --build
+	$(DOCKER_COMPOSE) up -d --build
 
 down:
-	docker compose down
+	$(DOCKER_COMPOSE) down
 
 restart: down up
 
 logs:
-	docker compose logs -f --tail=200
+	$(DOCKER_COMPOSE) logs -f --tail=200
 
 test:
 	python -m pytest -q

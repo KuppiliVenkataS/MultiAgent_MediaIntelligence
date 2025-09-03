@@ -1,12 +1,23 @@
 from fastapi import FastAPI
-from orchestrator.graph import run_graph, Context
-
+from pydantic import BaseModel
+from typing import List
 
 app = FastAPI()
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
-@app.post("/brief")
-def create_brief(goal: str):
-    ctx = Context(goal=goal)
-    result = run_graph(ctx)
-    return {"brief": result["brief"], "citations": result.get("citations", []), "actions": result["actions"]}
+class BriefResponse(BaseModel):
+    brief: str
+    citations: List[str] = []
+    actions: List[str] = []
+
+@app.post("/brief", response_model=BriefResponse)
+def brief(payload: dict):
+    goal = payload.get("goal", "Summarize recent events")
+    return BriefResponse(
+        brief=f"(stub) Brief for: {goal}",
+        citations=["https://example.com"],
+        actions=["notify_pr","start_monitor"]
+    )
