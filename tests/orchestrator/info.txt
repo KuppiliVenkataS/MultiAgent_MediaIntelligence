@@ -1,0 +1,3 @@
+deterministic plan on seed; verify returns False when sources disagree; brief includes ≥3 citations.
+
+KPIs: time‑to‑brief, factuality (human‑scored), action approval rate.

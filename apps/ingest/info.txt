@@ -1,1 +1,16 @@
 Get info from crawlers, feeds, webinfo
+
+Objective: Collect multi‑modal content (RSS/news/blogs, social APIs you have access to, YouTube/podcasts via transcripts, PDFs/images with OCR). Normalize to a common Document schema.
+(models.py)
+
+Key tasks
+
+1. RSS crawler (feedparser) → produce to Kafka topic raw.documents.
+
+2. Web page fetch (requests + trafilatura/readability) → text.
+
+3. YouTube transcript (yt-dlp + whisper or API) → text.
+
+4. PDFs/images → OCR (tesseract or easyocr) → text.
+
+5. Language ID (langdetect), dedupe (simhash/URL canonical), quality filters.

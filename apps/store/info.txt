@@ -1,1 +1,11 @@
 To create KG (Neo4j), vector (FAISS), search (elastic)
+
+Objective: Persist facts and make them retrievable via hybrid retrieval.
+
+Stores
+
+KG (Neo4j): entities, aliases, relationships, events.
+
+Search (Elasticsearch): BM25 for lexical and filter‑heavy queries.
+
+Vector (FAISS): semantic search across chunks.

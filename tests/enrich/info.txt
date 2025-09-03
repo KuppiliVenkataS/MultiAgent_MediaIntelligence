@@ -1,0 +1,2 @@
+gold doc with expected entities/events; threshold checks.
+KPIs: entity linking precision/recall, event extraction precision@k.

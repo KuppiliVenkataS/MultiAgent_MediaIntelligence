@@ -1,0 +1,3 @@
+Streamlit chat with evidence cards and filters (source, time, language). One‑click approve action → Slack/email webhook.
+
+KPIs: WAU, brief acceptance rate, response latency.

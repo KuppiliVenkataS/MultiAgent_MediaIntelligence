@@ -1,1 +1,3 @@
 This folder is for NER, sentiment and events
+
+Objective: Convert raw text into structured signals: entities, relations/events, stance/sentiment, credibility/bias.

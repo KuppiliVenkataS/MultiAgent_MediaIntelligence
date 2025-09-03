@@ -1,0 +1,2 @@
+mock FEEDS, ensure doc schema valid, duplicates collapsed.
+Metrics to check: KPIs -> throughput, dedupe rate, language coverage, failure rate.

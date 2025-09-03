@@ -1,0 +1,5 @@
+Hybrid retrieval
+
+Query both Elastic and FAISS; reciprocal rank fusion or weighted scores; enforce source diversity.
+
+KPIs: MRR/NDCG on a small labeled set; latency; cache hit rate.

@@ -1,1 +1,17 @@
 multi-agent planner / researcher/critic/summariser / executor
+
+
+Multi‑Agent Research → Verify → Brief → Act
+Objective: Formalize agent roles as a state machine/graph with policies, memory, and human‑in‑the‑loop approvals.
+
+Agents
+
+Planner: decomposes task, sets tool policies.
+
+Researcher: queries retrieval/search, browses sources.
+
+Fact‑Checker/Critic: cross‑source agreement; defamation/red flag checks.
+
+Briefing Writer: composes cited summary.
+
+Executor: creates alerts, tickets, influencer lists; waits for approval.
