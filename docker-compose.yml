@@ -89,6 +89,7 @@ services:
     environment:
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-kafka:9092}
       - RAW_TOPIC=${RAW_TOPIC:-raw-documents}
+      - INGEST_INTERVAL_SEC=60
       - USE_STUB_FEEDS=${USE_STUB_FEEDS:-0}
     depends_on: 
       kafka:

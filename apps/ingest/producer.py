@@ -6,6 +6,9 @@ from kafka.admin import KafkaAdminClient, NewTopic
 
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 
+
+
+
 def wait_for_broker(timeout=60):
     """Poll until the broker responds to AdminClient."""
     t0 = time.time()
@@ -38,7 +41,7 @@ def get_producer():
             v if isinstance(v, (bytes, bytearray))
             else json.dumps(v, ensure_ascii=False, default=str).encode("utf-8")
         ),
-        acks="1",
+        acks="all",
         retries=10,
         retry_backoff_ms=300,
         request_timeout_ms=30000,
