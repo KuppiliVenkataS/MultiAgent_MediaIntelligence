@@ -12,13 +12,30 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+      # Define both listeners explicitly (internal + host)
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Single-broker dev settings
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # Optional but helpful in dev
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
-    ports: ["9093:9093"]
+    ports:
+      - "9093:9093"     # host access (external)
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
 
   redis:
     image: redis:7
@@ -71,8 +88,12 @@ services:
       dockerfile: apps/ingest/Dockerfile
     environment:
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-kafka:9092}
-      - RAW_TOPIC=${RAW_TOPIC:-raw.documents}
-    depends_on: [kafka]
+      - RAW_TOPIC=${RAW_TOPIC:-raw-documents}
+      - USE_STUB_FEEDS=${USE_STUB_FEEDS:-0}
+    depends_on: 
+      kafka:
+        condition: service_healthy
+    
     restart: unless-stopped
 
   orchestrator:

@@ -1,4 +1,4 @@
-# feedparser pulls articles → we canonicalize + extract full text → create Document → publish JSON to Kafka topic raw.documents.
+# feedparser pulls articles → we canonicalize + extract full text → create Document → publish JSON to Kafka topic raw-documents.
 
 import time, feedparser, os
 from typing import List, Iterable, Dict, Any
@@ -6,7 +6,8 @@ from .models import Document
 from .normalizer import make_doc_id, extract_text, detect_lang, parse_published_dt
 from .producer import get_producer, wait_for_broker, ensure_topic, BOOTSTRAP
 
-
+import os
+USE_STUB = os.getenv("USE_STUB_FEEDS","0") == "1"
 
 # Start with 2 public feeds; add more later
 FEEDS: List[str] = [
@@ -14,9 +15,15 @@ FEEDS: List[str] = [
     "https://www.theverge.com/rss/index.xml",
 ]
 
-TOPIC = os.getenv("RAW_TOPIC", "raw.documents")
+TOPIC = os.getenv("RAW_TOPIC", "raw-documents")
 
 def iter_feed_entries() -> Iterable[Dict[str, Any]]:
+    
+    if USE_STUB:
+        yield {"link":"https://example.com/a","title":"Stub A","summary":"Alpha","published":"2024-01-01"}
+        yield {"link":"https://example.com/b","title":"Stub B","summary":"Beta","published":"2024-01-02"}
+        return
+
     for url in FEEDS:
         feed = feedparser.parse(url)
         for e in feed.entries:
@@ -52,7 +59,11 @@ def run_once(limit:int|None=None) -> int:
             lang=lang,
             published_at=published_dt,         # <-- set it (or None)
         )
-        prod.send(TOPIC, doc.model_dump(mode="json"))
+        # prod.send(TOPIC, doc.model_dump(mode="json"))
+        future = prod.send(TOPIC, doc.model_dump(mode="json"))
+        future.add_callback(lambda md: print(f"[ingest] sent {doc.id} to {md.topic}:{md.partition}@{md.offset}", flush=True))
+        future.add_errback(lambda exc: print(f"[ingest] send error for {doc.id}: {exc!r}", flush=True))
+        
         sent += 1
         if limit and sent >= limit:
             break

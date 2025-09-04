@@ -5,7 +5,7 @@ Objective: Collect multi‑modal content (RSS/news/blogs, social APIs you have a
 
 Key tasks
 
-1. RSS crawler (feedparser) → produce to Kafka topic raw.documents.
+1. RSS crawler (feedparser) → produce to Kafka topic raw-documents.
 
 2. Web page fetch (requests + trafilatura/readability) → text.
 
