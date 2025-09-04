@@ -1,12 +1,10 @@
 Data/
 
-.env.example
 pycache/
 *.pyc
 *.pyo
 *.pyd
-.venv
-
+.env
 env/
 .envrc
 dist/
@@ -20,5 +18,6 @@ artifacts/
 
 .vscode/
 .idea/
-
+test.txt
+test_ingest.txt
 
