@@ -1,3 +1,0 @@
-ingest-1  | [ingest] rss_worker starting...
-ingest-1  | [ingest] ERROR: KafkaTimeoutError: Timeout waiting for future
-ingest-1  | [ingest] ERROR: KafkaTimeoutError: Timeout waiting for future
