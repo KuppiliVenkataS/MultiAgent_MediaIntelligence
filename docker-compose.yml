@@ -79,8 +79,10 @@ services:
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
       - MIN_CITATIONS=${MIN_CITATIONS:-3}
       - MAX_TOKENS=${MAX_TOKENS:-8192}
+      - PYTHONPATH=/app
     depends_on: [neo4j, elasticsearch, redis, kafka]
     ports: ["8080:8080"]
+    restart: unless-stopped
 
   ingest:
     build:
@@ -97,6 +99,25 @@ services:
     
     restart: unless-stopped
 
+  enricher:
+    build:
+      context: .
+      dockerfile: apps/enricher/Dockerfile
+    environment:
+      - PYTHONPATH=/app
+      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-kafka:9092}
+      - RAW_TOPIC=${RAW_TOPIC:-raw-documents}
+      - ENRICHED_TOPIC=${ENRICHED_TOPIC:-enriched-documents}
+      - ERROR_TOPIC=${ERROR_TOPIC:-errors-documents}
+      - GROUP_ID=${GROUP_ID:-enricher.v1}
+      - SPACY_MODEL=en_core_web_sm
+      - ALLOW_RUNTIME_MODEL_DOWNLOAD=0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    
+    restart: unless-stopped
+
   orchestrator:
     build:
       context: .
@@ -106,5 +127,9 @@ services:
       - COST_CAP_USD=${COST_CAP_USD:-2.00}
     depends_on: [api, redis]
 
+
+
 volumes:
   neo4j_data:
+
+

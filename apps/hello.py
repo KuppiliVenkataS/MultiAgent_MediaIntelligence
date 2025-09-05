@@ -1,1 +1,0 @@
-print('hello Multi Agentic Media Intelligence')
