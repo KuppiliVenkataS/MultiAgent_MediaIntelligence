@@ -85,16 +85,19 @@ services:
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.14.2
-    depends_on: [elasticsearch]
+    depends_on: 
+      elasticsearch:
+        condition: service_healthy
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
     ports: ["5601:5601"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:5601/api/status | grep -q green"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:5601/api/status | grep -q 'overall'"]
       interval: 15s
       timeout: 5s
       retries: 40
-    restart: unless-stopped
+      start_period: 15s
 
   api:
     build:
@@ -121,7 +124,7 @@ services:
     environment:
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-kafka:9092}
       - RAW_TOPIC=${RAW_TOPIC:-raw-documents}
-      - INGEST_INTERVAL_SEC=60
+      - INGEST_INTERVAL_SEC=300
       - USE_STUB_FEEDS=${USE_STUB_FEEDS:-0}
     depends_on: 
       kafka:
