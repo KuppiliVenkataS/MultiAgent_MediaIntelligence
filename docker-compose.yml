@@ -66,11 +66,22 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.14.2
+    #container_name: elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - indices.query.bool.max_clause_count=4096
     ports: ["9200:9200"]
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -q '\"status\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.14.2
@@ -78,6 +89,12 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports: ["5601:5601"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5601/api/status | grep -q green"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+    restart: unless-stopped
 
   api:
     build:
@@ -132,7 +149,32 @@ services:
         condition: service_healthy
     
     restart: unless-stopped
+  
+  indexer:
+    build:
+      context: .
+      dockerfile: apps/indexer/Dockerfile
+      
+    depends_on:
+      kafka:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - PYTHONPATH=/app
+      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-kafka:9092}
+      - ENRICHED_TOPIC=${ENRICHED_TOPIC:-enriched-documents}
+      - ELASTIC_URL=${ELASTIC_URL:-http://elasticsearch:9200}
+      - ES_INDEX_ALIAS=${ES_INDEX_ALIAS:-news-enriched}
+      - ES_INDEX=${ES_INDEX:-news-enriched-v1}
+      - ES_SHARDS=1
+      - ES_REPLICAS=0
+      - BATCH_MAX_DOCS=500
+      - BATCH_FLUSH_SEC=3
+    restart: unless-stopped
 
+  
+  
   orchestrator:
     build:
       context: .
@@ -146,5 +188,6 @@ services:
 
 volumes:
   neo4j_data:
+  esdata:
 
 

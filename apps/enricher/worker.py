@@ -167,6 +167,7 @@ def build_enriched(record: Dict[str, Any]) -> EnrichedDocument:
         sentiment=sentiment,
         stance=stance,
         claims=claims,
+        text=text,
         extra={},
     )
 

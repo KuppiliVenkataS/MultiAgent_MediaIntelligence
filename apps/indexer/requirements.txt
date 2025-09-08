@@ -1,0 +1,6 @@
+elasticsearch>=8.14.0,<9
+kafka-python-ng[crc32c,lz4,snappy,zstd]==2.2.3
+pydantic==2.7.4
+backoff==2.2.1
+python-json-logger>=2.0.7
+pytest>=8.2.0

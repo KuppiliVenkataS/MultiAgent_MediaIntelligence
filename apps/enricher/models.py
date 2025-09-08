@@ -50,6 +50,7 @@ class EnrichedDocument(BaseModel):
     source_type: Optional[str] = None
     title: Optional[str] = None
     lang: Optional[str] = None
+    text: Optional[str] = None
 
     # Enrichment payload
     entities: List[Entity] = Field(default_factory=list)
