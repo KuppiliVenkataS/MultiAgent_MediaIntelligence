@@ -37,3 +37,12 @@ Plan: "Break the goal into steps: research → collect diverse sources → ident
 Verify: "Given citations and claims, check for agreement across at least 3 independent sources. Flag potential defamation or uncertainty."
 
 Brief: "Write a concise, neutral brief with timestamps, bullet points, and inline numbered citations. Include ‘What/Why/Impact/Next’."
+
+**Folder Information**
+apps/ingest/models.py: Basic structure of the documents received.
+apps/ingest/normalizer.py: Contains utility functions for text extraction, language detection, etc.
+apps/ingest/producer.py: To create a Kafka producer instance. A Kafka Producer is a client application that writes (publishes) messages or records to Kafka topics.
+apps/ingest/rss_worker.py: This file is typically a Python script designed to ingest data from one or more RSS feeds and publish it as a stream of events to a Kafka topic (add as many feeds as you want). We used a STUB for checking the initial setup.
+apps/ingest/Dockerfile: A text file that contains all the commands needed to build a Docker image.
+
+scripts/create_topics.sh: The purpose of this file is to create the topics the pipeline expects with the right names, partitions, and replication. It creates raw-documents, error-documents, and enriched-documents. (There is a version issue with ‘-’ and ‘.’ in the document names. Please follow the requirements of the version. )

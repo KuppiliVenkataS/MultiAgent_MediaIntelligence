@@ -3,7 +3,11 @@ kafka-python-ng[crc32c,lz4,snappy,zstd]==2.2.3
 
 # NLP
 spacy==3.7.4
-#en-core-web-sm
 
 # Data model
 pydantic==2.7.4
+
+vaderSentiment==3.3.2
+# Optional ( enable HF stance with HF API Token):
+transformers==4.43.3
+torch==2.3.1

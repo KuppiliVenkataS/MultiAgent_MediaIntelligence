@@ -1,28 +1,12 @@
-# from kafka import KafkaConsumer, KafkaProducer
-# import json
-# from schemas import Entity, Event
-
-
-# consumer = KafkaConsumer("raw-documents", bootstrap_servers=["kafka:9092"], value_deserializer=lambda b: json.loads(b))
-# producer = KafkaProducer(bootstrap_servers=["kafka:9092"], value_serializer=lambda v: json.dumps(v).encode())
-
-
-# for msg in consumer:
-#     doc = msg.value
-#     # run NER/linking .. TBD
-#     entities = link_entities(run_ner(doc["text"]))
-#     sentiment = clf_sentiment(doc["text"]) # [-1..1]
-#     events = extract_events(doc["text"], entities)
-#     payload = {"doc_id": doc["id"], "entities": [e.__dict__ for e in entities],
-#     "events": [ev.__dict__ for ev in events], "sentiment": sentiment}
-#     producer.send("enriched-documents", payload)
-
 import json, os, sys, signal
 from typing import Any, Dict
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaTimeoutError
 from .models import EnrichedDocument
 from .nlp import extract_entities
+from .sentiment import doc_sentiment
+from .stance import stance_for_entities
+from .claims import extract_claims
 
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 RAW_TOPIC = os.getenv("RAW_TOPIC", "raw-documents")
@@ -129,6 +113,28 @@ def main():
         consumer.close()
         producer.close()
         print("[enricher] stopped", flush=True)
+
+def build_enriched(record: Dict[str, Any]) -> EnrichedDocument:
+    text = record.get("text") or ""
+    lang = (record.get("lang") or "en").lower()
+    entities = extract_entities(text) if lang.startswith("en") else []
+
+    sentiment = doc_sentiment(text) if lang.startswith("en") else None
+    stance = stance_for_entities(text, entities) if lang.startswith("en") else []
+    claims = extract_claims(text) if lang.startswith("en") else []
+
+    return EnrichedDocument(
+        id=record["id"],
+        source_url=record.get("source_url"),
+        source_type=record.get("source_type"),
+        title=record.get("title"),
+        lang=record.get("lang"),
+        entities=entities,
+        sentiment=sentiment,
+        stance=stance,
+        claims=claims,
+        extra={},
+    )
 
 if __name__ == "__main__":
     main()

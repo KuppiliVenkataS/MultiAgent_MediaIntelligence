@@ -16,10 +16,30 @@ FEEDS: List[str] = [
     "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
     "https://www.theverge.com/rss/index.xml",
 ]
-R = redis.from_url(os.getenv("REDIS_URL","redis://redis:6379/0"))
+# R = redis.from_url(os.getenv("REDIS_URL","redis://redis:6379/0"))
 DEDUP_TTL = 7*24*3600  # 7 days
 
 TOPIC = os.getenv("RAW_TOPIC", "raw-documents")
+
+def get_redis(max_wait_sec: int = 60):
+    url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    t0 = time.time()
+    while time.time() - t0 < max_wait_sec:
+        try:
+            r = redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+            r.ping()
+            return r
+        except Exception as e:
+            print(f"[ingest] Redis not ready ({e}); retrying...", flush=True)
+            time.sleep(2)
+    raise RuntimeError("Redis not reachable")
+
+
+R = None
+try:
+    R = get_redis()
+except Exception as e:
+    print("[ingest] WARNING: continuing without Redis dedupe:", e, flush=True)
 
 def iter_feed_entries() -> Iterable[Dict[str, Any]]:
     

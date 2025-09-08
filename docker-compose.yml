@@ -25,6 +25,12 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
+      KAFKA_LOG_RETENTION_BYTES: 134217728   # 128 MB total per topic
+      KAFKA_LOG_RETENTION_MS: 3600000        # 1 hour retention
+      KAFKA_LOG_SEGMENT_BYTES: 67108864      # 64 MB segments
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+
+
       # Optional but helpful in dev
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
@@ -39,7 +45,14 @@ services:
 
   redis:
     image: redis:7
-    ports: ["6379:6379"]
+    ports: 
+      - "6379:6379"
+    healthcheck:
+    #test: ["CMD", "redis-cli", "ping"]
+    test: ["CMD-SHELL", "redis-cli ping || exit 1"]
+    interval: 5s
+    timeout: 3s
+    retries: 30
 
   neo4j:
     image: neo4j:5.22
@@ -76,7 +89,7 @@ services:
       - NEO4J_PASS=${NEO4J_PASS}
       - ELASTIC_URL=${ELASTIC_URL}
       - REDIS_URL=${REDIS_URL}
-      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
+      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}      
       - MIN_CITATIONS=${MIN_CITATIONS:-3}
       - MAX_TOKENS=${MAX_TOKENS:-8192}
       - PYTHONPATH=/app
@@ -95,6 +108,8 @@ services:
       - USE_STUB_FEEDS=${USE_STUB_FEEDS:-0}
     depends_on: 
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     
     restart: unless-stopped
