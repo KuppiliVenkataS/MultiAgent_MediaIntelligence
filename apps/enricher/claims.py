@@ -1,11 +1,18 @@
+# Basic claim mining via high-precision regex patterns on sentence segments. 
+# This is a pragmatic baseline: 
+# it catches a large share of business-news actions (e.g., 'announced', 'plans to', 'up 10%')
+# at very low cost and with clear cues.
+
 from typing import List
 import re, spacy
 from .models import Claim
 
+# Use a blank English pipeline with just a sentencizer for speed.
 _NLP = spacy.blank("en")  # just for sentencizer
 if "sentencizer" not in _NLP.pipe_names:
     _NLP.add_pipe("sentencizer")
 
+# (pattern, kind) pairs; keep patterns short/specific to limit false positives.
 PATS = [
     (r"\b(plans to|aims to|intends to)\b",            "commitment"),
     (r"\b(will|set to|poised to)\b",                  "forecast"),
@@ -18,6 +25,7 @@ PATS = [
 ]
 
 COMP = [(re.compile(p, re.I), kind) for p, kind in PATS]
+
 
 def extract_claims(text: str, max_sents: int = 20) -> List[Claim]:
     text = (text or "").strip()
@@ -38,6 +46,7 @@ def extract_claims(text: str, max_sents: int = 20) -> List[Claim]:
             # pick the most specific kind heuristically (prefer event/forecast/commitment over metric/uncertain)
             priority = ["event","commitment","forecast","metric","uncertain","other"]
             chosen = next((k for k in priority if k in kinds), "other")
+            # Naive confidence: more cues → slightly higher confidence (cap at 0.9).
             conf = min(0.9, 0.5 + 0.1*len(cues))
             out.append(Claim(text=s, kind=chosen, cues=cues, confidence=conf))
     return out

@@ -1,3 +1,12 @@
+"""
+Kafka consumer → enrichment → producer worker.
+
+- Consumes normalized documents from RAW_TOPIC.
+- Runs NER, sentiment, stance, and claim extraction (English-gated).
+- Produces EnrichedDocument to ENRICHED_TOPIC.
+- On exceptions, emits a context payload to ERROR_TOPIC and skips committing
+  that offset so the message can be retried (or handled by a DLQ flow later).
+"""
 import json, os, sys, signal
 from typing import Any, Dict
 from kafka import KafkaConsumer, KafkaProducer
@@ -8,6 +17,7 @@ from .sentiment import doc_sentiment
 from .stance import stance_for_entities
 from .claims import extract_claims
 
+# ---- Runtime config via env ----
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 RAW_TOPIC = os.getenv("RAW_TOPIC", "raw-documents")
 OUT_TOPIC = os.getenv("ENRICHED_TOPIC", "enriched-documents")
@@ -15,6 +25,12 @@ ERR_TOPIC = os.getenv("ERROR_TOPIC", "errors-documents")
 GROUP_ID = os.getenv("GROUP_ID", "enricher.v1")
 
 def get_consumer() -> KafkaConsumer:
+    """
+    Kafka consumer tuned for stream processing:
+    - manual commit: only commit after successful produce to OUT_TOPIC.
+    - auto_offset_reset: 'earliest' is friendlier for dev/backfills.
+    - max_poll_records: small batch to keep memory bounded and latency low.
+    """
     return KafkaConsumer(
         RAW_TOPIC,
         bootstrap_servers=[BOOTSTRAP],
@@ -28,6 +44,12 @@ def get_consumer() -> KafkaConsumer:
     )
 
 def get_producer() -> KafkaProducer:
+    """
+    Kafka producer tuned for durability and throughput:
+    - acks='all' for safety (single-broker dev still useful to catch errors).
+    - small linger to batch a bit without adding much latency.
+    - compression saves bandwidth/IO on larger payloads.
+    """
     return KafkaProducer(
         bootstrap_servers=[BOOTSTRAP],
         value_serializer=lambda v: (
@@ -44,6 +66,12 @@ def get_producer() -> KafkaProducer:
     )
 
 def build_enriched(record: Dict[str, Any]) -> EnrichedDocument:
+    """
+    Build the EnrichedDocument from an input record.
+
+    We gate heavy work on language (English only), and share the original
+    metadata so downstream consumers don’t need to refetch it.
+    """
     text = record.get("text") or ""
     lang = (record.get("lang") or "en").lower()
     entities = extract_entities(text) if lang.startswith("en") else []
@@ -57,33 +85,39 @@ def build_enriched(record: Dict[str, Any]) -> EnrichedDocument:
         extra={},
     )
 
-_running = True
+_running = True # global flag toggled by signal handler
 def _graceful(*_):
+    """Allow Ctrl+C / SIGTERM to stop the loop cleanly."""
     global _running
     _running = False
     print("[enricher] shutdown signal received", flush=True)
 
 def main():
     print("[enricher] starting; bootstrap:", BOOTSTRAP, "in:", RAW_TOPIC, "out:", OUT_TOPIC, flush=True)
+    
+    # Wire signals for clean shutdown in containers/orchestrators.
     signal.signal(signal.SIGINT, _graceful)
     signal.signal(signal.SIGTERM, _graceful)
 
     consumer = get_consumer()
     producer = get_producer()
 
+    # Main poll → process → produce → commit loop.
     while _running:
         batch = consumer.poll(timeout_ms=1000)
         if not batch:
             continue
 
         for tp, messages in batch.items():
+            # Process each message in order per-partition.
             for msg in messages:
                 try:
-                    record = msg.value
+                    record = msg.value # already deserialized JSON
                     enriched = build_enriched(record)
                     fut = producer.send(OUT_TOPIC, enriched.model_dump(mode="json"))
                     fut.get(timeout=30)  # block for acks=all, raises on failure
 
+                    # Send to OUT_TOPIC and block for ack (raises on failure).
                     print(f"[enricher] {enriched.id} -> {OUT_TOPIC}:{tp.partition}", flush=True)
 
                 except Exception as e:

@@ -25,6 +25,15 @@ brief:
 
 DOCKER_COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
+up:
+	$(DOCKER_COMPOSE) up -d $(SERVICES)
+
+down:
+	$(DOCKER_COMPOSE) down
+
+logs:
+	$(DOCKER_COMPOSE) logs -f --tail=200
+	
 topics:
 	 bash scripts/create_topics.sh
 

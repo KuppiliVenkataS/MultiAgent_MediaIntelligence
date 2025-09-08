@@ -1,13 +1,17 @@
+# Stance estimation toward entities. 
+# By default,  lexical rule-based uses local context windows around the entity span.
 from typing import List
 import os, re, math
 from .models import Stance, Entity
 
+## Lightweight cue lexicons; tweak over time with evaluation.
 SUPPORT_CUES = {"supports","backs","approves","praises","benefits","boosts","wins","gains","surges",
                 "record","strong","beats","outperforms","bullish","positive"}
 OPPOSE_CUES  = {"criticizes","opposes","slams","hits","hurts","threatens","fails","drops",
                 "weak","misses","underperforms","bearish","negative","lawsuit","probe"}
 
-# USE_HF = os.getenv("USE_HF_STANCE","1") == "1" # when you want to stay rule-based
+# USE_HF = os.getenv("USE_HF_STANCE","0") == "1" # when you want to stay rule-based
+# Remember to give access to HuggingFace
 USE_HF = os.getenv("USE_HF_STANCE","1") == "1"
 _HF = None
 if USE_HF:
@@ -18,10 +22,15 @@ if USE_HF:
         _HF = None  # fallback to rules
 
 def _window(text: str, start: int, end: int, radius: int = 80) -> str:
+    """Return a context window around the entity span for lexical scoring."""
     a = max(0, start - radius); b = min(len(text), end + radius)
     return text[a:b]
 
 def _score_rules(snippet: str) -> float:
+    """
+    Score support vs oppose cues in a snippet.
+    Returns a value in roughly [-1, 1]; 0 means no cues found.
+    """
     t = snippet.lower()
     pos = sum(1 for w in SUPPORT_CUES if re.search(rf"\b{re.escape(w)}\b", t))
     neg = sum(1 for w in OPPOSE_CUES  if re.search(rf"\b{re.escape(w)}\b", t))
@@ -29,6 +38,12 @@ def _score_rules(snippet: str) -> float:
     return (pos - neg) / (pos + neg)
 
 def stance_for_entities(text: str, entities: List[Entity]) -> List[Stance]:
+    """
+    Compute stance per entity using rules, optionally refined by NLI.
+
+    Design choice: we keep 'unknown' when there are *no* cues, instead of forcing
+    'neutral'—this preserves information for downstream sampling.
+    """
     if not text or not entities:
         return []
 

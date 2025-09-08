@@ -1,9 +1,18 @@
+'''
+Document-level sentiment using VADER.
+
+VADER is rule-based, fast, and works well on headlines/business news. We keep a
+simple mapping to 'neg/neu/pos' for filtering and store the raw compound score.
+
+'''
 from typing import Optional
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from .models import Sentiment
 
 _an = SentimentIntensityAnalyzer()
 
+
+# Compute sentiment on the first N characters.  Returns  Sentiment or None if text is empty.
 def doc_sentiment(text: str) -> Optional[Sentiment]:
     text = (text or "").strip()
     if not text:
