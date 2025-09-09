@@ -2,6 +2,9 @@
 
 import time, feedparser, os, redis
 from typing import List, Iterable, Dict, Any
+import  hashlib, backoff, requests
+from dateutil import parser as dtp
+from datetime import datetime, timezone
 from .models import Document
 from .normalizer import make_doc_id, extract_text, detect_lang, parse_published_dt
 from .producer import get_producer, wait_for_broker, ensure_topic, BOOTSTRAP
@@ -10,6 +13,9 @@ import os
 USE_STUB = os.getenv("USE_STUB_FEEDS","0") == "1"
 INTERVAL = int(os.getenv("INGEST_INTERVAL_SEC", "300"))  # default 5 min
 RUN_ONCE = os.getenv("RUN_ONCE", "0") == "1"
+UA = os.getenv("HTTP_USER_AGENT", "Mozilla/5.0 (AgenticNewsroom/1.0; +https://example.com)")
+TIMEOUT = (5, 15)  # connect, read seconds
+
 
 # Start with 2 public feeds; add more later
 FEEDS: List[str] = [
@@ -58,7 +64,99 @@ def iter_feed_entries() -> Iterable[Dict[str, Any]]:
                 "published": e.get("published", ""),
             }
 
-def run_once(limit:int|None=None) -> int:
+def load_feeds():
+    if os.getenv("RSS_FEEDS"):
+        return [u.strip() for u in os.getenv("RSS_FEEDS").split(",") if u.strip()]
+    
+    path = os.getenv("RSS_FEEDS_FILE")
+    # path = 'feeds/feeds.txt'
+    if path and os.path.exists(path):
+        return [ln.strip() for ln in open(path) if ln.strip() and not ln.startswith("#")]
+    return []
+
+@backoff.on_exception(backoff.expo, (requests.RequestException,), max_time=30)
+def fetch_url(url: str) -> bytes:
+    r = requests.get(url, headers={"User-Agent": UA}, timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.content
+
+def parse_entry(feed_url: str, e) -> Document | None:
+    # prefer link+title+summary/content
+    link = getattr(e, "link", None) or getattr(e, "id", None)
+    title = getattr(e, "title", "") or ""
+    text = getattr(e, "summary", "") or ""
+    if not text and getattr(e, "content", None):
+        try:
+            text = e.content[0].value
+        except Exception:
+            pass
+
+    # published_at
+    published_at = None
+    for cand in ("published", "updated"):
+        val = getattr(e, cand, None)
+        if val:
+            try:
+                published_at = dtp.parse(val).astimezone(timezone.utc).isoformat()
+                break
+            except Exception:
+                pass
+    if not published_at:
+        published_at = datetime.now(timezone.utc).isoformat()
+
+    if not link or not (title or text):
+        return None
+
+    # stable id by link
+    did = hashlib.sha1(link.encode("utf-8")).hexdigest()
+
+    return Document(
+        id=did,
+        source_url=link,
+        source_type="rss",
+        title=title.strip()[:500],
+        text=(text or "").strip(),
+        lang="en",  # let enricher gate non-en later if you detect language upstream
+        published_at=published_at,
+        authors=[],
+        media=[],
+        raw={"feed": feed_url},
+    )
+
+def run_once():
+    feeds = load_feeds()
+    if not feeds:
+        print("[ingest] no feeds configured", flush=True); return 0
+
+    prod = get_producer()
+    sent = 0
+    for u in feeds:
+        try:
+            blob = fetch_url(u)
+            fp = feedparser.parse(blob)
+            print(f"[ingest] {u} entries={len(fp.entries)}", flush=True)
+            for e in fp.entries:
+                doc = parse_entry(u, e)
+                if not doc: continue
+                # optional Redis de-dupe
+                try:
+                    #from .redis_client import R
+                    k = f"seen:{doc.id}"
+                    if R and not R.setnx(k, 1):
+                        continue
+                    if R: R.expire(k, 7*24*3600)
+                except Exception:
+                    pass
+                prod.send(os.getenv("RAW_TOPIC","raw-documents"), doc.model_dump(mode="json")).get(timeout=10)
+                sent += 1
+        except Exception as ex:
+            print(f"[ingest] ERROR feed {u}: {ex}", flush=True)
+    print(f"[ingest] sent total={sent}", flush=True)
+    return sent
+
+
+
+def run_once_old(limit:int|None=None) -> int:
     # Wait for broker, ensure topic
     if not wait_for_broker(timeout=90):
         print("[ingest] Kafka not ready after 90s")
@@ -103,20 +201,30 @@ def run_once(limit:int|None=None) -> int:
 
 if __name__ == "__main__":
     print("[ingest] rss_worker starting...")
-    try:
-        n = run_once(limit=None)
-        print(f"[ingest] published {n} docs")
-    except Exception as e:
-        print("[ingest] ERROR:", e, flush=True)
-
-    if RUN_ONCE:
-        print("[ingest] RUN_ONCE=1 -> exiting")
+    print("[ingest] starting real feeds…", flush=True)
+    if os.getenv("RUN_ONCE","0") == "1":
+        run_once()
     else:
+        interval = int(os.getenv("INGEST_INTERVAL_SEC","600"))
         while True:
-            try:
-                time.sleep(INTERVAL)
-                n = run_once(limit=None)
-                print(f"[ingest] published {n} docs")
-            except Exception as e:
-                print("[ingest] ERROR:", e, flush=True)
+            run_once()
+            time.sleep(interval)
+
+
+    # try:
+    #     n = run_once(limit=None)
+    #     print(f"[ingest] published {n} docs")
+    # except Exception as e:
+    #     print("[ingest] ERROR:", e, flush=True)
+
+    # if RUN_ONCE:
+    #     print("[ingest] RUN_ONCE=1 -> exiting")
+    # else:
+    #     while True:
+    #         try:
+    #             time.sleep(INTERVAL)
+    #             n = run_once(limit=None)
+    #             print(f"[ingest] published {n} docs")
+    #         except Exception as e:
+    #             print("[ingest] ERROR:", e, flush=True)
 

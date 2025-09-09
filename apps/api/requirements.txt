@@ -1,0 +1,6 @@
+fastapi==0.115
+uvicorn[standard]==0.30.6
+elasticsearch==8.14.0
+neo4j==5.21.0
+pydantic==2.7.4
+python-dateutil==2.9.0.post0

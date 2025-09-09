@@ -55,14 +55,49 @@ services:
       retries: 30
 
   neo4j:
-    image: neo4j:5.22
+    image: neo4j:5.23.0
+    ports:
+      - "7474:7474"   # HTTP (browser)
+      - "7687:7687"   # Bolt
     environment:
-      NEO4J_AUTH: neo4j/${NEO4J_PASS:-neo4j_password}
-      NEO4J_dbms_security_auth__minimum__password__length: 6
+      - NEO4J_AUTH=neo4j/testpassword
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=512m
+      - NEO4J_server_memory_pagecache_size=256m
+      
     volumes:
       - neo4j_data:/data
-      - ./infra/neo4j:/var/lib/neo4j/conf
-    ports: ["7474:7474","7687:7687"]
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p testpassword 'RETURN 1' | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+  
+  
+  
+  
+  graph-writer:
+    build:
+      context: .
+      dockerfile: apps/graph_writer/Dockerfile
+    environment:
+      - PYTHONPATH=/app
+      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-kafka:9092}
+      - ENRICHED_TOPIC=${ENRICHED_TOPIC:-enriched-documents}
+      - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASS=${NEO4J_PASS:-testpassword}
+      - BATCH_MAX_DOCS=200
+      - BATCH_FLUSH_SEC=3
+    depends_on:
+      kafka:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    
+    restart: unless-stopped
+  
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.14.2
@@ -104,17 +139,20 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     environment:
-      - NEO4J_URI=${NEO4J_URI}
-      - NEO4J_USER=${NEO4J_USER}
-      - NEO4J_PASS=${NEO4J_PASS}
-      - ELASTIC_URL=${ELASTIC_URL}
+      - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASS=${NEO4J_PASS:-testpassword}
+      - NEO4J_ENABLED=${NEO4J_ENABLED:-1}
+      - ELASTIC_URL=${ELASTIC_URL:-http://elasticsearch:9200}
+      - ES_INDEX_ALIAS=${ES_INDEX_ALIAS:-news-enriched}
       - REDIS_URL=${REDIS_URL}
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}      
       - MIN_CITATIONS=${MIN_CITATIONS:-3}
       - MAX_TOKENS=${MAX_TOKENS:-8192}
       - PYTHONPATH=/app
     depends_on: [neo4j, elasticsearch, redis, kafka]
-    ports: ["8080:8080"]
+    ports: ["8080:8000"]
+    command: ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
     restart: unless-stopped
 
   ingest:
@@ -124,14 +162,17 @@ services:
     environment:
       - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-kafka:9092}
       - RAW_TOPIC=${RAW_TOPIC:-raw-documents}
-      - INGEST_INTERVAL_SEC=300
-      - USE_STUB_FEEDS=${USE_STUB_FEEDS:-0}
+      - INGEST_INTERVAL_SEC=600
+      - USE_STUB_FEEDS=0
+      - RSS_FEEDS=https://feeds.bbci.co.uk/news/rss.xml,https://www.theverge.com/rss/index.xml,https://feeds.arstechnica.com/arstechnica/index/,http://feeds.feedburner.com/TechCrunch/
+      - RSS_FEEDS_FILE=/app/feeds.txt
     depends_on: 
       kafka:
         condition: service_healthy
       redis:
         condition: service_healthy
-    
+    volumes:
+      - ./feeds/feeds.txt:/app/feeds.txt:ro
     restart: unless-stopped
 
   enricher:
@@ -192,5 +233,6 @@ services:
 volumes:
   neo4j_data:
   esdata:
+  
 
 
