@@ -14,8 +14,8 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
 
       # Define both listeners explicitly (internal + host)
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENERS: PLAINTEXT://127.0.0.1:9092,PLAINTEXT_HOST://127.0.0.1:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
 
@@ -35,7 +35,7 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
     ports:
-      - "9093:9093"     # host access (external)
+      - "29092:29092"     # host access (external)
     healthcheck:
       test: ["CMD", "bash", "-lc", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
       interval: 10s
@@ -218,7 +218,43 @@ services:
     restart: unless-stopped
 
   
-  
+  dlq-handler:
+    build: ./apps/dlq-handler
+    container_name: dlq-handler
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - INPUT_TOPICS=errors-documents,retries-documents
+      - OUTPUT_TOPIC=enriched-documents           # where successful retries go
+      - RETRIES_TOPIC=retries-documents
+      - DLQ_TOPIC=dlq-documents
+      - MAX_RETRIES=5
+      - BASE_BACKOFF_SECONDS=5
+      - BACKOFF_MULTIPLIER=3
+      - ES_HOST=http://elasticsearch:9200
+      - ES_ERROR_INDEX=news-errors-v1
+      - LOG_LEVEL=INFO
+      # Optional Slack/Webhook for fatal moves to DLQ
+      - ALERT_WEBHOOK_URL=
+    depends_on:
+      - kafka
+      - elasticsearch
+    restart: unless-stopped
+
+  lag-watcher:
+    build: ./apps/lag-watcher
+    container_name: lag-watcher
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - GROUPS=enricher-v1,indexer-v1,graph-writer-v1,dlq-handler-v1
+      - LAG_THRESHOLD=1000
+      - POLL_SECONDS=30
+      - ALERT_WEBHOOK_URL=
+      - LOG_LEVEL=INFO
+    depends_on:
+      - kafka
+    restart: unless-stopped
+
+
   orchestrator:
     build:
       context: .

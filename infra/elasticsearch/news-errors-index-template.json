@@ -1,0 +1,21 @@
+{
+    "index_patterns": ["news-errors-v1*"],
+    "template": {
+      "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+      "mappings": {
+        "dynamic": false,
+        "properties": {
+          "ts": { "type": "date" },
+          "stage": { "type": "keyword" },              
+          "error_type": { "type": "keyword" },         
+          "message": { "type": "text" },
+          "retries": { "type": "integer" },
+          "original_topic": { "type": "keyword" },
+          "original_partition": { "type": "integer" },
+          "original_offset": { "type": "long" },
+          "payload": { "type": "object", "enabled": true }
+        }
+      }
+    }
+}
+  
